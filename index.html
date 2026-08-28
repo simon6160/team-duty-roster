@@ -6,276 +6,823 @@
     <title>球隊打掃值日生排班系統</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Alpine.js 負責網頁互動 -->
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <!-- React & ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Barlow+Condensed:wght@600;700&family=Roboto+Mono:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
         body { font-family: 'Noto Sans TC', sans-serif; background-color: #F6F3EC; color: #1F2A3C; }
         .font-display { font-family: 'Barlow Condensed', 'Noto Sans TC', sans-serif; }
         .font-mono { font-family: 'Roboto Mono', monospace; }
+        .chip { transition: all 0.15s ease; }
     </style>
 </head>
-<body x-data="rosterApp()" x-init="init()">
+<body>
+    <div id="root"></div>
 
-    <!-- Header -->
-    <div class="bg-[#16233B] text-[#F6F3EC] px-6 py-7 relative overflow-hidden">
-        <div class="absolute -right-8 -top-8 w-40 h-40 rounded-full bg-[#CFE85C] opacity-10"></div>
-        <div class="max-w-6xl mx-auto relative">
-            <div class="font-display uppercase tracking-widest text-xs text-[#CFE85C] mb-1">Team Duty Roster</div>
-            <h1 class="font-display font-bold text-3xl sm:text-4xl uppercase tracking-wide">球隊打掃值日生排班助手</h1>
-            <p class="text-sm text-[#B9C2D4] mt-1">自動避開球員固定補習或請假日期，輕鬆產出班表並一鍵複製公告。</p>
-        </div>
-        <div class="h-1 w-full bg-gradient-to-r from-[#CFE85C] via-[#5CC8E8] to-transparent mt-5 rounded-full"></div>
-    </div>
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
 
-    <!-- Main Container -->
-    <div class="max-w-6xl mx-auto px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-[340px_1fr] gap-6">
-        
-        <!-- 左側：球員管理 -->
-        <div>
-            <div class="flex items-center justify-between mb-3">
-                <h2 class="font-display font-bold text-xl uppercase tracking-wide">球員名單</h2>
-            </div>
+        // SVG Icons components
+        const Plus = ({size=16, className=""}) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M12 5v14M5 12h14"/></svg>
+        );
+        const Trash2 = ({size=16, className=""}) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
+        );
+        const Copy = ({size=16, className=""}) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+        );
+        const RefreshCw = ({size=16, className=""}) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>
+        );
+        const AlertTriangle = ({size=16, className=""}) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+        );
+        const Users = ({size=16, className=""}) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        );
+        const CalendarDays = ({size=16, className=""}) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg>
+        );
+        const Check = ({size=16, className=""}) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="20 6 9 17 4 12"/></svg>
+        );
+        const Upload = ({size=16, className=""}) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+        );
+        const X = ({size=16, className=""}) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        );
 
-            <!-- 新增球員卡片 -->
-            <div class="bg-white rounded-xl border border-[#D8D3C6] p-4 mb-4 shadow-sm">
-                <input type="text" x-model="newName" @keydown.enter="addPlayer()" placeholder="輸入球員姓名" class="w-full px-3 py-2 rounded-lg border border-[#D8D3C6] text-sm mb-3 outline-none focus:border-[#16233B]">
-                <div class="text-xs text-[#6B7280] mb-1.5">固定無法打掃的星期（點擊選取）：</div>
-                <div class="flex gap-1.5 mb-3 flex-wrap">
-                    <template x-for="(label, wd) in ['日', '一', '二', '三', '四', '五', '六']">
-                        <button type="button" @click="toggleNewOff(wd)" 
-                            class="w-9 h-9 rounded-full text-sm font-medium border transition"
-                            :class="newOffDays.includes(wd) ? 'bg-[#FF6B4A] text-white border-[#FF6B4A]' : 'bg-[#F6F3EC] text-[#1F2A3C] border-[#D8D3C6]'"
-                            x-text="label">
-                        </button>
-                    </template>
-                </div>
-                <button @click="addPlayer()" class="w-full bg-[#16233B] text-[#CFE85C] font-medium py-2 rounded-lg text-sm hover:bg-[#0f1a2c] transition">
-                    + 新增球員
-                </button>
-            </div>
+        const WD_LABELS = ["日", "一", "二", "三", "四", "五", "六"];
+        const WD_FULL = ["週日", "週一", "週二", "週三", "週四", "週五", "週六"];
 
-            <!-- 球員列表 -->
-            <div class="space-y-3">
-                <template x-if="players.length === 0">
-                    <div class="text-sm text-[#6B7280] italic px-1">尚未新增球員</div>
-                </template>
-                <template x-for="(p, index) in players" :key="p.id">
-                    <div class="bg-white rounded-xl border border-[#D8D3C6] overflow-hidden shadow-sm">
-                        <div class="flex items-center gap-2 px-3 py-2.5 border-l-4" :style="`border-left-color: ${p.color}`">
-                            <div class="font-mono text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center text-white shrink-0" :style="`background-color: ${p.color}`" x-text="index + 1"></div>
-                            <div class="font-medium text-sm flex-1" x-text="p.name"></div>
-                            <button @click="removePlayer(p.id)" class="text-[#9CA3AF] hover:text-[#FF6B4A]">🗑️</button>
-                        </div>
-                        <div class="px-3 pb-3">
-                            <div class="flex gap-1 flex-wrap mb-2">
-                                <template x-for="(label, wd) in ['日', '一', '二', '三', '四', '五', '六']">
-                                    <button @click="togglePlayerOff(p.id, wd)" 
-                                        class="w-7 h-7 rounded-full text-xs font-medium border transition"
-                                        :class="p.offDays.includes(wd) ? 'bg-[#FF6B4A] text-white border-[#FF6B4A]' : 'bg-[#F6F3EC] text-[#1F2A3C] border-[#D8D3C6]'"
-                                        x-text="label">
-                                    </button>
-                                </template>
-                            </div>
-                        </div>
-                    </div>
-                </template>
-            </div>
-        </div>
-
-        <!-- 右側：排班設定與結果 -->
-        <div>
-            <div class="flex items-center gap-2 mb-3">
-                <h2 class="font-display font-bold text-xl uppercase tracking-wide">排班設定與班表</h2>
-            </div>
-
-            <!-- 設定面板 -->
-            <div class="bg-white rounded-xl border border-[#D8D3C6] p-4 mb-5 shadow-sm">
-                <div class="grid grid-cols-2 gap-3 mb-3">
-                    <div>
-                        <div class="text-xs text-[#6B7280] mb-1">開始日期</div>
-                        <input type="date" x-model="startDate" class="w-full text-sm px-2 py-1.5 rounded-md border border-[#D8D3C6] outline-none">
-                    </div>
-                    <div>
-                        <div class="text-xs text-[#6B7280] mb-1">結束日期</div>
-                        <input type="date" x-model="endDate" class="w-full text-sm px-2 py-1.5 rounded-md border border-[#D8D3C6] outline-none">
-                    </div>
-                </div>
-                <div class="mb-3">
-                    <div class="text-xs text-[#6B7280] mb-1.5">需要打掃的星期（可含週六，建議取消週日）</div>
-                    <div class="flex gap-1.5 flex-wrap">
-                        <template x-for="(label, wd) in ['日', '一', '二', '三', '四', '五', '六']">
-                            <button type="button" @click="toggleDutyWd(wd)" 
-                                class="w-9 h-9 rounded-full text-sm font-medium border transition"
-                                :class="dutyWeekdays.includes(wd) ? 'bg-[#16233B] text-[#CFE85C] border-[#16233B]' : 'bg-[#F6F3EC] text-[#1F2A3C] border-[#D8D3C6]'"
-                                x-text="label">
-                            </button>
-                        </template>
-                    </div>
-                </div>
-                <div class="flex items-end justify-between">
-                    <div>
-                        <div class="text-xs text-[#6B7280] mb-1">每天打掃人數</div>
-                        <input type="number" min="1" x-model.number="perDay" class="w-20 text-sm px-2 py-1.5 rounded-md border border-[#D8D3C6] outline-none">
-                    </div>
-                    <button @click="generateSchedule()" class="bg-[#CFE85C] text-[#16233B] font-bold text-sm px-5 py-2.5 rounded-lg hover:brightness-95 transition shadow-sm">
-                        🚀 開始自動排班
-                    </button>
-                </div>
-            </div>
-
-            <!-- 排班結果輸出 -->
-            <template x-if="scheduleRows.length > 0">
-                <div class="bg-white rounded-xl border border-[#D8D3C6] overflow-hidden shadow-sm">
-                    <div class="flex items-center justify-between px-4 py-3 border-b border-[#D8D3C6] bg-[#FBFAF6]">
-                        <div class="font-display font-bold uppercase tracking-wide text-sm">排班公告預覽</div>
-                        <button @click="copySchedule()" class="bg-[#16233B] text-[#F6F3EC] text-xs font-medium px-3 py-1.5 rounded-lg hover:bg-[#0f1a2c]">
-                            📋 複製 LINE 公告文字
-                        </button>
-                    </div>
-                    <div class="divide-y divide-[#EDE9DE] max-h-[500px] overflow-y-auto p-4 space-y-2">
-                        <template x-for="row in scheduleRows" :key="row.date">
-                            <div class="flex items-center justify-between text-sm py-1.5 border-b border-gray-100">
-                                <span class="font-mono text-gray-600" x-text="row.dateStr"></span>
-                                <span class="font-bold text-[#16233B]" x-text="row.names.length ? row.names.join('、') : '⚠️ 當日無人可排'"></span>
-                            </div>
-                        </template>
-                    </div>
-                </div>
-            </template>
-        </div>
-    </div>
-
-    <!-- Toast 提示框 -->
-    <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[#16233B] text-[#F6F3EC] text-sm px-4 py-2 rounded-full shadow-lg hidden">
-        已複製到剪貼簿！
-    </div>
-
-    <script>
-        const JERSEY_COLORS = ["#CFE85C", "#5CC8E8", "#E85C9E", "#E8B95C", "#8C5CE8", "#5CE89A"];
-        
-        function rosterApp() {
-            return {
-                players: [],
-                newName: '',
-                newOffDays: [],
-                startDate: new Date().toISOString().split('T')[0],
-                endDate: new Date(Date.now() + 13*86400000).toISOString().split('T')[0],
-                dutyWeekdays: [1, 2, 3, 4, 5, 6], // 預設週一至週六
-                perDay: 1,
-                scheduleRows: [],
-
-                init() {
-                    const saved = localStorage.getItem('team_players');
-                    if (saved) this.players = JSON.parse(saved);
-                },
-
-                savePlayers() {
-                    localStorage.setItem('team_players', JSON.stringify(this.players));
-                },
-
-                toggleNewOff(wd) {
-                    if (this.newOffDays.includes(wd)) {
-                        this.newOffDays = this.newOffDays.filter(d => d !== wd);
-                    } else {
-                        this.newOffDays.push(wd);
-                    }
-                },
-
-                addPlayer() {
-                    if (!this.newName.trim()) return;
-                    this.players.push({
-                        id: Date.now().toString(),
-                        name: this.newName.trim(),
-                        offDays: [...this.newOffDays],
-                        color: JERSEY_COLORS[this.players.length % JERSEY_COLORS.length]
-                    });
-                    this.newName = '';
-                    this.newOffDays = [];
-                    this.savePlayers();
-                },
-
-                removePlayer(id) {
-                    this.players = this.players.filter(p => p.id !== id);
-                    this.savePlayers();
-                },
-
-                    togglePlayerOff(id, wd) {
-                    const p = this.players.find(x => x.id === id);
-                    if (p) {
-                        if (p.offDays.includes(wd)) {
-                            p.offDays = p.offDays.filter(d => d !== wd);
-                        } else {
-                            p.offDays.push(wd);
-                        }
-                        this.savePlayers();
-                    }
-                },
-
-                toggleDutyWd(wd) {
-                    if (this.dutyWeekdays.includes(wd)) {
-                        this.dutyWeekdays = this.dutyWeekdays.filter(d => d !== wd);
-                    } else {
-                        this.dutyWeekdays.push(wd);
-                        this.dutyWeekdays.sort();
-                    }
-                },
-
-                generateSchedule() {
-                    if (this.players.length === 0) {
-                        alert('請先新增至少一位球員！');
-                        return;
-                    }
-
-                    let counts = {};
-                    this.players.forEach(p => counts[p.id] = 0);
-                    
-                    let results = [];
-                    let cur = new Date(this.startDate);
-                    let end = new Date(this.endDate);
-                    let queueIdx = 0;
-
-                    while (cur <= end) {
-                        let wd = cur.getDay();
-                        let dateKey = cur.toISOString().split('T')[0];
-                        let wdNames = ['日', '一', '二', '三', '四', '五', '六'];
-
-                        if (this.dutyWeekdays.includes(wd)) {
-                            // 過濾今天有空的人
-                            let available = this.players.filter(p => !p.offDays.includes(wd));
-                            // 依照打掃次數排序（達成公平輪流）
-                            available.sort((a, b) => counts[a.id] - counts[b.id]);
-
-                            let chosen = [];
-                            for (let i = 0; i < this.perDay && available.length > 0; i++) {
-                                let target = available.shift();
-                                chosen.push(target);
-                                counts[target.id]++;
-                            }
-
-                            results.push({
-                                dateStr: `${dateKey.slice(5)} (${wdNames[wd]})`,
-                                names: chosen.map(c => c.name)
-                            });
-                        }
-                        cur.setDate(cur.getDate() + 1);
-                    }
-                    this.scheduleRows = results;
-                },
-
-                copySchedule() {
-                    let text = "📋 球隊打掃值日生班表\n";
-                    this.scheduleRows.forEach(r => {
-                        text += `${r.dateStr}：${r.names.length ? r.names.join('、') : '無人'}\n`;
-                    });
-                    navigator.clipboard.writeText(text).then(() => {
-                        let t = document.getElementById('toast');
-                        t.classList.remove('hidden');
-                        setTimeout(() => t.classList.add('hidden'), 2000);
-                    });
-                }
-            }
+        function toKey(d) {
+          const y = d.getFullYear();
+          const m = String(d.getMonth() + 1).padStart(2, "0");
+          const day = String(d.getDate()).padStart(2, "0");
+          return `${y}-${m}-${day}`;
         }
+        function todayKey() {
+          return toKey(new Date());
+        }
+        function addDays(key, n) {
+          const d = new Date(key + "T00:00:00");
+          d.setDate(d.getDate() + n);
+          return toKey(d);
+        }
+        function fmtShort(key) {
+          const d = new Date(key + "T00:00:00");
+          return `${d.getMonth() + 1}/${d.getDate()}`;
+        }
+
+        function parseWeekdayToken(token) {
+          const t = token.trim().replace(/^週|^周/, "");
+          const idx = WD_LABELS.indexOf(t);
+          if (idx !== -1) return idx;
+          const numMap = { "0": 0, "1": 1, "2": 2, "3": 3, "4": 4, "5": 5, "6": 6 };
+          if (numMap[t] !== undefined) return numMap[t];
+          return null;
+        }
+
+        function parseImportText(text) {
+          const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+          const results = [];
+          for (const line of lines) {
+            const parts = line.split(/[,，]/).map((p) => p.trim()).filter(Boolean);
+            if (parts.length === 0) continue;
+            const name = parts[0];
+            const offDays = [];
+            for (const tok of parts.slice(1)) {
+              const wd = parseWeekdayToken(tok);
+              if (wd !== null && !offDays.includes(wd)) offDays.push(wd);
+            }
+            results.push({ name, offDays });
+          }
+          return results;
+        }
+
+        function batchLabel(startDate, endDate) {
+          const s = new Date(startDate + "T00:00:00");
+          const e = new Date(endDate + "T00:00:00");
+          if (s.getFullYear() === e.getFullYear() && s.getMonth() === e.getMonth()) {
+            return `${s.getFullYear()}年${s.getMonth() + 1}月`;
+          }
+          return `${fmtShort(startDate)}–${fmtShort(endDate)}`;
+        }
+
+        const JERSEY_COLORS = ["#CFE85C", "#5CC8E8", "#E85C9E", "#E8B95C", "#8C5CE8", "#5CE89A"];
+
+        function DutyRosterApp() {
+          const [players, setPlayers] = useState([]);
+          const [settings, setSettings] = useState({
+            startDate: todayKey(),
+            endDate: addDays(todayKey(), 13),
+            dutyWeekdays: [1, 2, 3, 4, 5, 6],
+            perDay: 1,
+          });
+          const [schedules, setSchedules] = useState([]);
+          const [activeScheduleId, setActiveScheduleId] = useState(null);
+          const [loaded, setLoaded] = useState(false);
+          const [toast, setToast] = useState("");
+          const [newName, setNewName] = useState("");
+          const [newOffDays, setNewOffDays] = useState([]);
+          const [excInputs, setExcInputs] = useState({});
+          const [showImport, setShowImport] = useState(false);
+          const [importText, setImportText] = useState("");
+          const [confirmDialog, setConfirmDialog] = useState(null);
+          const [exportModal, setExportModal] = useState(null);
+          const skipSave = useRef(true);
+
+          useEffect(() => {
+            try {
+              const p = localStorage.getItem("players");
+              if (p) setPlayers(JSON.parse(p));
+            } catch (e) {}
+            try {
+              const s = localStorage.getItem("settings");
+              if (s) setSettings(JSON.parse(s));
+            } catch (e) {}
+            try {
+              const sc = localStorage.getItem("schedules");
+              if (sc) setSchedules(JSON.parse(sc));
+            } catch (e) {}
+            try {
+              const aid = localStorage.getItem("activeScheduleId");
+              if (aid) setActiveScheduleId(JSON.parse(aid));
+            } catch (e) {}
+            setLoaded(true);
+            skipSave.current = false;
+          }, []);
+
+          useEffect(() => {
+            if (skipSave.current) return;
+            localStorage.setItem("players", JSON.stringify(players));
+          }, [players]);
+          useEffect(() => {
+            if (skipSave.current) return;
+            localStorage.setItem("settings", JSON.stringify(settings));
+          }, [settings]);
+          useEffect(() => {
+            if (skipSave.current) return;
+            localStorage.setItem("schedules", JSON.stringify(schedules));
+          }, [schedules]);
+          useEffect(() => {
+            if (skipSave.current) return;
+            localStorage.setItem("activeScheduleId", JSON.stringify(activeScheduleId));
+          }, [activeScheduleId]);
+
+          function showToast(msg) {
+            setToast(msg);
+            setTimeout(() => setToast(""), 1800);
+          }
+
+          function tryCopyText(text) {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              return navigator.clipboard.writeText(text);
+            }
+            return Promise.reject(new Error("clipboard api unavailable"));
+          }
+
+          function fallbackCopyText(text) {
+            try {
+              const ta = document.createElement("textarea");
+              ta.value = text;
+              ta.style.position = "fixed";
+              ta.style.opacity = "0";
+              document.body.appendChild(ta);
+              ta.focus();
+              ta.select();
+              const ok = document.execCommand("copy");
+              document.body.removeChild(ta);
+              return ok;
+            } catch (e) {
+              return false;
+            }
+          }
+
+          function downloadTextFile(text, filename) {
+            try {
+              const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = filename;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              URL.revokeObjectURL(url);
+              return true;
+            } catch (e) {
+              return false;
+            }
+          }
+
+          function askConfirm(message, onConfirm, confirmLabel = "確定") {
+            setConfirmDialog({ message, onConfirm, confirmLabel });
+          }
+
+          function addPlayer() {
+            const name = newName.trim();
+            if (!name) return;
+            const id = (crypto.randomUUID && crypto.randomUUID()) || String(Date.now() + Math.random());
+            setPlayers((prev) => [
+              ...prev,
+              { id, name, offDays: newOffDays, exceptions: [], color: JERSEY_COLORS[prev.length % JERSEY_COLORS.length] },
+            ]);
+            setNewName("");
+            setNewOffDays([]);
+          }
+
+          function removePlayer(id) {
+            setPlayers((prev) => prev.filter((p) => p.id !== id));
+          }
+
+          function toggleOffDay(id, wd) {
+            setPlayers((prev) =>
+              prev.map((p) =>
+                p.id === id
+                  ? { ...p, offDays: p.offDays.includes(wd) ? p.offDays.filter((d) => d !== wd) : [...p.offDays, wd] }
+                  : p
+              )
+            );
+          }
+
+          function addException(id) {
+            const val = excInputs[id];
+            if (!val) return;
+            setPlayers((prev) =>
+              prev.map((p) => (p.id === id && !p.exceptions.includes(val) ? { ...p, exceptions: [...p.exceptions, val].sort() } : p))
+            );
+            setExcInputs((prev) => ({ ...prev, [id]: "" }));
+          }
+
+          function removeException(id, dateKey) {
+            setPlayers((prev) =>
+              prev.map((p) => (p.id === id ? { ...p, exceptions: p.exceptions.filter((d) => d !== dateKey) } : p))
+            );
+          }
+
+          function runImport() {
+            const parsed = parseImportText(importText);
+            if (parsed.length === 0) {
+              showToast("沒有讀到可匯入的內容");
+              return;
+            }
+            const existingNames = new Set(players.map((p) => p.name));
+            const toAdd = [];
+            let skipped = 0;
+            parsed.forEach((item, i) => {
+              if (existingNames.has(item.name)) {
+                skipped++;
+                return;
+              }
+              existingNames.add(item.name);
+              const id = (crypto.randomUUID && crypto.randomUUID()) || String(Date.now() + Math.random() + i);
+              toAdd.push({
+                id,
+                name: item.name,
+                offDays: item.offDays,
+                exceptions: [],
+                color: JERSEY_COLORS[(players.length + toAdd.length) % JERSEY_COLORS.length],
+              });
+            });
+            setPlayers((prev) => [...prev, ...toAdd]);
+            setImportText("");
+            setShowImport(false);
+            showToast(
+              skipped > 0 ? `已匯入 ${toAdd.length} 位，略過 ${skipped} 位重複姓名` : `已匯入 ${toAdd.length} 位球員`
+            );
+          }
+
+          function toggleDutyWeekday(wd) {
+            setSettings((prev) => ({
+              ...prev,
+              dutyWeekdays: prev.dutyWeekdays.includes(wd)
+                ? prev.dutyWeekdays.filter((d) => d !== wd)
+                : [...prev.dutyWeekdays, wd].sort(),
+            }));
+          }
+
+          function generateSchedule() {
+            if (players.length === 0) {
+              showToast("請先新增球員");
+              return;
+            }
+            const counts = {};
+            const lastAssigned = {};
+            players.forEach((p, i) => {
+              counts[p.id] = 0;
+              lastAssigned[p.id] = i;
+            });
+            const result = [];
+            let cur = settings.startDate;
+            let dayIndex = 0;
+            let guard = 0;
+            while (cur <= settings.endDate && guard < 1000) {
+              guard++;
+              const d = new Date(cur + "T00:00:00");
+              const wd = d.getDay();
+              if (settings.dutyWeekdays.includes(wd)) {
+                const available = players.filter((p) => !p.offDays.includes(wd) && !p.exceptions.includes(cur));
+                const sorted = [...available].sort((a, b) => {
+                  if (counts[a.id] !== counts[b.id]) return counts[a.id] - counts[b.id];
+                  return lastAssigned[a.id] - lastAssigned[b.id];
+                });
+                const chosen = sorted.slice(0, settings.perDay);
+                chosen.forEach((p) => {
+                  counts[p.id]++;
+                  lastAssigned[p.id] = dayIndex + players.length;
+                });
+                result.push({
+                  date: cur,
+                  weekday: wd,
+                  assigned: chosen.map((p) => p.id),
+                  slots: settings.perDay,
+                });
+                dayIndex++;
+              }
+              cur = addDays(cur, 1);
+            }
+
+            const existing = schedules.find(
+              (b) => b.startDate === settings.startDate && b.endDate === settings.endDate
+            );
+            if (existing) {
+              askConfirm(`已經有 ${batchLabel(settings.startDate, settings.endDate)} 的班表，要重新產生覆蓋嗎？`, () => {
+                setSchedules((prev) =>
+                  prev.map((b) =>
+                    b.id === existing.id
+                      ? { ...b, dutyWeekdays: settings.dutyWeekdays, perDay: settings.perDay, rows: result }
+                      : b
+                  )
+                );
+                setActiveScheduleId(existing.id);
+                showToast("已重新產生班表");
+              }, "確定覆蓋");
+              return;
+            }
+
+            const id = (crypto.randomUUID && crypto.randomUUID()) || String(Date.now() + Math.random());
+            const batch = {
+              id,
+              startDate: settings.startDate,
+              endDate: settings.endDate,
+              dutyWeekdays: settings.dutyWeekdays,
+              perDay: settings.perDay,
+              rows: result,
+            };
+            setSchedules((prev) => [...prev, batch].sort((a, b) => (a.startDate < b.startDate ? -1 : 1)));
+            setActiveScheduleId(id);
+            showToast(`已產生 ${batchLabel(settings.startDate, settings.endDate)} 班表`);
+          }
+
+          const activeSchedule = schedules.find((b) => b.id === activeScheduleId) || null;
+
+          function selectBatch(batch) {
+            setActiveScheduleId(batch.id);
+            setSettings({
+              startDate: batch.startDate,
+              endDate: batch.endDate,
+              dutyWeekdays: batch.dutyWeekdays,
+              perDay: batch.perDay,
+            });
+          }
+
+          function deleteBatch(id) {
+            askConfirm("確定要刪除這份班表嗎？", () => {
+              setSchedules((prev) => {
+                const next = prev.filter((b) => b.id !== id);
+                if (activeScheduleId === id) {
+                  setActiveScheduleId(next.length ? next[next.length - 1].id : null);
+                }
+                return next;
+              });
+              showToast("已刪除該月份班表");
+            });
+          }
+
+          function reassignSlot(dateKey, slotIdx, playerId) {
+            if (!activeScheduleId) return;
+            setSchedules((prev) =>
+              prev.map((batch) => {
+                if (batch.id !== activeScheduleId) return batch;
+                return {
+                  ...batch,
+                  rows: batch.rows.map((row) => {
+                    if (row.date !== dateKey) return row;
+                    const assigned = [...row.assigned];
+                    assigned[slotIdx] = playerId || null;
+                    return { ...row, assigned };
+                  }),
+                };
+              })
+            );
+          }
+
+          function openExportModal() {
+            if (!activeSchedule || activeSchedule.rows.length === 0) {
+              showToast("尚無班表可匯出");
+              return;
+            }
+            const label = batchLabel(activeSchedule.startDate, activeSchedule.endDate);
+            const lines = [`📋 值日生打掃班表（${label}）`];
+            activeSchedule.rows.forEach((row) => {
+              const names = row.assigned
+                .map((id) => players.find((p) => p.id === id)?.name)
+                .filter(Boolean);
+              const l = names.length ? names.join("、") : "⚠️ 待安排";
+              lines.push(`${fmtShort(row.date)}（${WD_LABELS[row.weekday]}）${l}`);
+            });
+            setExportModal({ text: lines.join("\n"), filename: `值日生班表_${label}.txt` });
+          }
+
+          function playerNameById(id) {
+            return players.find((p) => p.id === id)?.name || "";
+          }
+          function playerColorById(id) {
+            return players.find((p) => p.id === id)?.color || "#CFE85C";
+          }
+
+          function isAvailable(player, dateKey, weekday) {
+            return !player.offDays.includes(weekday) && !player.exceptions.includes(dateKey);
+          }
+
+          if (!loaded) {
+            return (
+              <div className="min-h-[400px] flex items-center justify-center bg-[#F6F3EC]">
+                <div className="text-[#16233B] font-mono text-sm">載入中…</div>
+              </div>
+            );
+          }
+
+          return (
+            <div className="w-full min-h-screen bg-[#F6F3EC] text-[#1F2A3C]">
+              {/* Header */}
+              <div className="bg-[#16233B] text-[#F6F3EC] px-6 py-7 relative overflow-hidden">
+                <div className="absolute -right-8 -top-8 w-40 h-40 rounded-full bg-[#CFE85C] opacity-10" />
+                <div className="relative max-w-6xl mx-auto">
+                  <div className="font-display uppercase tracking-widest text-xs text-[#CFE85C] mb-1">
+                    Team Duty Roster
+                  </div>
+                  <h1 className="font-display font-bold text-3xl sm:text-4xl uppercase tracking-wide">
+                    值日生排班助手
+                  </h1>
+                  <p className="text-sm text-[#B9C2D4] mt-1">
+                    先登記每位球員固定補習/無法打掃的日子，排班時自動略過衝突，不用再一個個對時間。
+                  </p>
+                </div>
+                <div className="h-1 w-full bg-gradient-to-r from-[#CFE85C] via-[#5CC8E8] to-transparent mt-5 rounded-full" />
+              </div>
+
+              <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-[340px_1fr] gap-6">
+                {/* Roster panel */}
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Users size={18} className="text-[#16233B]" />
+                    <h2 className="font-display font-bold text-xl uppercase tracking-wide flex-1">球員名單</h2>
+                    <button
+                      onClick={() => setShowImport((v) => !v)}
+                      className="flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg border border-[#D8D3C6] bg-white hover:bg-[#F0EDE3]"
+                    >
+                      <Upload size={13} /> 匯入名單
+                    </button>
+                  </div>
+
+                  {showImport && (
+                    <div className="bg-white rounded-xl border border-[#D8D3C6] p-4 mb-4 shadow-sm">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="text-xs text-[#6B7280]">
+                          一行一位球員，格式：<span className="font-mono">姓名,星期,星期</span>（星期可省略）
+                        </div>
+                        <button onClick={() => setShowImport(false)} className="text-[#9CA3AF] hover:text-[#1F2A3C]">
+                          <X size={14} />
+                        </button>
+                      </div>
+                      <textarea
+                        value={importText}
+                        onChange={(e) => setImportText(e.target.value)}
+                        placeholder={"王小明,二,四\n林小華\n陳小美,三"}
+                        rows={5}
+                        className="w-full text-sm px-3 py-2 rounded-lg border border-[#D8D3C6] outline-none font-mono focus:border-[#16233B]"
+                      />
+                      <button
+                        onClick={runImport}
+                        className="mt-2 w-full flex items-center justify-center gap-1.5 bg-[#16233B] text-[#CFE85C] font-medium py-2 rounded-lg text-sm hover:bg-[#0f1a2c]"
+                      >
+                        <Upload size={15} /> 確認匯入
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Add player */}
+                  <div className="bg-white rounded-xl border border-[#D8D3C6] p-4 mb-4 shadow-sm">
+                    <input
+                      value={newName}
+                      onChange={(e) => setNewName(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && addPlayer()}
+                      placeholder="球員姓名"
+                      className="w-full px-3 py-2 rounded-lg border border-[#D8D3C6] text-sm mb-3 outline-none focus:border-[#16233B]"
+                    />
+                    <div className="text-xs text-[#6B7280] mb-1.5">固定無法打掃的星期（例：補習日）</div>
+                    <div className="flex gap-1.5 mb-3 flex-wrap">
+                      {WD_LABELS.map((label, wd) => (
+                        <button
+                          key={wd}
+                          onClick={() =>
+                            setNewOffDays((prev) => (prev.includes(wd) ? prev.filter((d) => d !== wd) : [...prev, wd]))
+                          }
+                          className={`chip w-9 h-9 rounded-full text-sm font-medium border ${
+                            newOffDays.includes(wd)
+                              ? "bg-[#FF6B4A] text-white border-[#FF6B4A]"
+                              : "bg-[#F6F3EC] text-[#1F2A3C] border-[#D8D3C6]"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      onClick={addPlayer}
+                      className="w-full flex items-center justify-center gap-1.5 bg-[#16233B] text-[#CFE85C] font-medium py-2 rounded-lg text-sm hover:bg-[#0f1a2c]"
+                    >
+                      <Plus size={16} /> 新增球員
+                    </button>
+                  </div>
+
+                  {/* Player list */}
+                  <div className="space-y-3">
+                    {players.length === 0 && (
+                      <div className="text-sm text-[#6B7280] italic px-1">尚未新增球員</div>
+                    )}
+                    {players.map((p, idx) => (
+                      <div key={p.id} className="bg-white rounded-xl border border-[#D8D3C6] overflow-hidden shadow-sm">
+                        <div className="flex items-center gap-2 px-3 py-2.5" style={{ borderLeft: `5px solid ${p.color}` }}>
+                          <div
+                            className="font-mono text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center text-white shrink-0"
+                            style={{ backgroundColor: p.color }}
+                          >
+                            {idx + 1}
+                          </div>
+                          <div className="font-medium text-sm flex-1">{p.name}</div>
+                          <button onClick={() => removePlayer(p.id)} className="text-[#9CA3AF] hover:text-[#FF6B4A]" title="刪除球員">
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                        <div className="px-3 pb-3">
+                          <div className="flex gap-1 flex-wrap mb-2">
+                            {WD_LABELS.map((label, wd) => (
+                              <button
+                                key={wd}
+                                onClick={() => toggleOffDay(p.id, wd)}
+                                title={p.offDays.includes(wd) ? "無法打掃" : "可打掃"}
+                                className={`chip w-7 h-7 rounded-full text-xs font-medium border ${
+                                  p.offDays.includes(wd)
+                                    ? "bg-[#FF6B4A] text-white border-[#FF6B4A] line-through"
+                                    : "bg-[#F6F3EC] text-[#1F2A3C] border-[#D8D3C6]"
+                                }`}
+                              >
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="flex gap-1.5 flex-wrap mb-1.5">
+                            {p.exceptions.map((exc) => (
+                              <span
+                                key={exc}
+                                className="font-mono text-[11px] bg-[#FFF1EC] text-[#C24A2E] px-2 py-0.5 rounded-full flex items-center gap-1"
+                              >
+                                {fmtShort(exc)} 請假
+                                <button onClick={() => removeException(p.id, exc)} className="hover:text-black">×</button>
+                              </span>
+                            ))}
+                          </div>
+                          <div className="flex gap-1.5">
+                            <input
+                              type="date"
+                              value={excInputs[p.id] || ""}
+                              onChange={(e) => setExcInputs((prev) => ({ ...prev, [p.id]: e.target.value }))}
+                              className="flex-1 text-xs px-2 py-1 rounded-md border border-[#D8D3C6] outline-none"
+                            />
+                            <button
+                              onClick={() => addException(p.id)}
+                              className="text-xs px-2 py-1 rounded-md bg-[#F6F3EC] border border-[#D8D3C6] hover:bg-[#EDE9DE]"
+                            >
+                              臨時請假
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Schedule panel */}
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <CalendarDays size={18} className="text-[#16233B]" />
+                    <h2 className="font-display font-bold text-xl uppercase tracking-wide">排班設定與班表</h2>
+                  </div>
+
+                  <div className="bg-white rounded-xl border border-[#D8D3C6] p-4 mb-5 shadow-sm">
+                    <div className="grid grid-cols-2 gap-3 mb-3">
+                      <div>
+                        <div className="text-xs text-[#6B7280] mb-1">開始日期</div>
+                        <input
+                          type="date"
+                          value={settings.startDate}
+                          onChange={(e) => setSettings((s) => ({ ...s, startDate: e.target.value }))}
+                          className="w-full text-sm px-2 py-1.5 rounded-md border border-[#D8D3C6] outline-none"
+                        />
+                      </div>
+                      <div>
+                        <div className="text-xs text-[#6B7280] mb-1">結束日期</div>
+                        <input
+                          type="date"
+                          value={settings.endDate}
+                          onChange={(e) => setSettings((s) => ({ ...s, endDate: e.target.value }))}
+                          className="w-full text-sm px-2 py-1.5 rounded-md border border-[#D8D3C6] outline-none"
+                        />
+                      </div>
+                    </div>
+                    <div className="mb-3">
+                      <div className="text-xs text-[#6B7280] mb-1.5">需要打掃的星期</div>
+                      <div className="flex gap-1.5 flex-wrap">
+                        {WD_LABELS.map((label, wd) => (
+                          <button
+                            key={wd}
+                            onClick={() => toggleDutyWeekday(wd)}
+                            className={`chip w-9 h-9 rounded-full text-sm font-medium border ${
+                              settings.dutyWeekdays.includes(wd)
+                                ? "bg-[#16233B] text-[#CFE85C] border-[#16233B]"
+                                : "bg-[#F6F3EC] text-[#1F2A3C] border-[#D8D3C6]"
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="flex items-end gap-3">
+                      <div>
+                        <div className="text-xs text-[#6B7280] mb-1">每天需要人數</div>
+                        <input
+                          type="number"
+                          min={1}
+                          max={Math.max(players.length, 1)}
+                          value={settings.perDay}
+                          onChange={(e) =>
+                            setSettings((s) => ({ ...s, perDay: Math.max(1, parseInt(e.target.value) || 1) }))
+                          }
+                          className="w-20 text-sm px-2 py-1.5 rounded-md border border-[#D8D3C6] outline-none"
+                        />
+                      </div>
+                      <button
+                        onClick={generateSchedule}
+                        className="ml-auto flex items-center gap-1.5 bg-[#CFE85C] text-[#16233B] font-bold text-sm px-4 py-2 rounded-lg hover:brightness-95 shadow-sm"
+                      >
+                        <RefreshCw size={15} /> 產生班表
+                      </button>
+                    </div>
+                  </div>
+
+                  {schedules.length > 0 && (
+                    <div className="flex items-center gap-1.5 mb-3 flex-wrap">
+                      {schedules.map((batch) => (
+                        <button
+                          key={batch.id}
+                          onClick={() => selectBatch(batch)}
+                          className={`group flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-full border ${
+                            batch.id === activeScheduleId
+                              ? "bg-[#16233B] text-[#CFE85C] border-[#16233B]"
+                              : "bg-white text-[#1F2A3C] border-[#D8D3C6] hover:bg-[#F0EDE3]"
+                          }`}
+                        >
+                          {batchLabel(batch.startDate, batch.endDate)}
+                          <span
+                            role="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteBatch(batch.id);
+                            }}
+                            className={`opacity-60 hover:opacity-100 ${
+                              batch.id === activeScheduleId ? "text-[#CFE85C]" : "text-[#9CA3AF]"
+                            }`}
+                            title="刪除此份班表"
+                          >
+                            <X size={12} />
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {activeSchedule && activeSchedule.rows.length > 0 && (
+                    <div className="bg-white rounded-xl border border-[#D8D3C6] overflow-hidden shadow-sm">
+                      <div className="flex items-center justify-between px-4 py-3 border-b border-[#D8D3C6] bg-[#FBFAF6]">
+                        <div className="font-display font-bold uppercase tracking-wide text-sm">
+                          {batchLabel(activeSchedule.startDate, activeSchedule.endDate)}
+                          <span className="font-mono normal-case text-xs text-[#9CA3AF] ml-2">
+                            {fmtShort(activeSchedule.startDate)} — {fmtShort(activeSchedule.endDate)}
+                          </span>
+                        </div>
+                        <button
+                          onClick={openExportModal}
+                          className="flex items-center gap-1.5 text-xs font-medium bg-[#16233B] text-[#F6F3EC] px-3 py-1.5 rounded-lg hover:bg-[#0f1a2c]"
+                        >
+                          <Copy size={13} /> 匯出班表
+                        </button>
+                      </div>
+                      <div className="divide-y divide-[#EDE9DE] max-h-[560px] overflow-y-auto">
+                        {activeSchedule.rows.map((row) => {
+                          const unmet = row.assigned.filter(Boolean).length < row.slots;
+                          return (
+                            <div key={row.date} className="flex items-center gap-3 px-4 py-2.5">
+                              <div className="font-mono text-sm w-16 shrink-0 text-[#6B7280]">
+                                {fmtShort(row.date)}
+                                <span className="ml-1 text-[11px]">（{WD_LABELS[row.weekday]}）</span>
+                              </div>
+                              <div className="flex-1 flex flex-wrap gap-1.5">
+                                {Array.from({ length: row.slots }).map((_, slotIdx) => {
+                                  const pid = row.assigned[slotIdx];
+                                  return (
+                                    <select
+                                      key={slotIdx}
+                                      value={pid || ""}
+                                      onChange={(e) => reassignSlot(row.date, slotIdx, e.target.value)}
+                                      className="text-sm px-2 py-1 rounded-md border outline-none"
+                                      style={{
+                                        borderColor: pid ? playerColorById(pid) : "#FF6B4A",
+                                        backgroundColor: pid ? `${playerColorById(pid)}22` : "#FFF1EC",
+                                      }}
+                                    >
+                                      <option value="">⚠️ 待安排</option>
+                                      {players.map((p) => (
+                                        <option key={p.id} value={p.id}>
+                                          {p.name}
+                                          {isAvailable(p, row.date, row.weekday) ? "" : "（衝突）"}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  );
+                                })}
+                              </div>
+                              {unmet && <AlertTriangle size={16} className="text-[#FF6B4A] shrink-0" title="當日尚有人員未補齊" />}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {schedules.length === 0 && (
+                    <div className="text-sm text-[#6B7280] italic px-1">尚未產生班表，設定好日期範圍後按「產生班表」。</div>
+                  )}
+                </div>
+              </div>
+
+              {exportModal && (
+                <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, padding: "16px" }}>
+                  <div style={{ backgroundColor: "#FFFFFF", borderRadius: "12px", boxShadow: "0 10px 40px rgba(0,0,0,0.25)", maxWidth: "460px", width: "100%", padding: "20px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+                      <div style={{ fontSize: "15px", fontWeight: 700, color: "#1F2A3C" }}>匯出班表</div>
+                      <button onClick={() => setExportModal(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#9CA3AF" }}><X size={16} /></button>
+                    </div>
+                    <div style={{ fontSize: "12px", color: "#6B7280", marginBottom: "8px" }}>可以直接在下方全選複製，或用按鈕複製／下載成檔案。</div>
+                    <textarea readOnly value={exportModal.text} onFocus={(e) => e.target.select()} rows={10} style={{ width: "100%", fontFamily: "'Roboto Mono', monospace", fontSize: "13px", padding: "10px", borderRadius: "8px", border: "1px solid #D8D3C6", resize: "vertical", boxSizing: "border-box", color: "#1F2A3C" }} />
+                    <div style={{ display: "flex", gap: "8px", marginTop: "12px", flexWrap: "wrap" }}>
+                      <button onClick={() => { tryCopyText(exportModal.text).then(() => showToast("已複製，可貼到 LINE 群組")).catch(() => { const ok = fallbackCopyText(exportModal.text); showToast(ok ? "已複製，可貼到 LINE 群組" : "複製失敗"); }); }} style={{ flex: 1, fontSize: "13px", padding: "8px 12px", borderRadius: "8px", border: "none", backgroundColor: "#16233B", color: "#CFE85C", fontWeight: 600, cursor: "pointer" }}>複製到剪貼簿</button>
+                      <button onClick={() => { const ok = downloadTextFile(exportModal.text, exportModal.filename); showToast(ok ? "已下載班表檔案" : "下載失敗"); }} style={{ flex: 1, fontSize: "13px", padding: "8px 12px", borderRadius: "8px", border: "1px solid #D8D3C6", backgroundColor: "#FFFFFF", color: "#1F2A3C", fontWeight: 600, cursor: "pointer" }}>下載 .txt 檔</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {confirmDialog && (
+                <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, padding: "16px" }}>
+                  <div style={{ backgroundColor: "#FFFFFF", borderRadius: "12px", boxShadow: "0 10px 40px rgba(0,0,0,0.25)", maxWidth: "380px", width: "100%", padding: "20px" }}>
+                    <div style={{ fontSize: "14px", color: "#1F2A3C", marginBottom: "16px", lineHeight: 1.6 }}>{confirmDialog.message}</div>
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
+                      <button onClick={() => setConfirmDialog(null)} style={{ fontSize: "14px", padding: "6px 14px", borderRadius: "8px", border: "1px solid #D8D3C6", backgroundColor: "#FFFFFF", color: "#1F2A3C", cursor: "pointer" }}>取消</button>
+                      <button onClick={() => { confirmDialog.onConfirm(); setConfirmDialog(null); }} style={{ fontSize: "14px", padding: "6px 14px", borderRadius: "8px", border: "none", backgroundColor: "#FF6B4A", color: "#FFFFFF", fontWeight: 600, cursor: "pointer" }}>{confirmDialog.confirmLabel}</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {toast && (
+                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[#16233B] text-[#F6F3EC] text-sm px-4 py-2 rounded-full shadow-lg flex items-center gap-2">
+                  <Check size={14} className="text-[#CFE85C]" /> {toast}
+                </div>
+              )}
+            </div>
+          );
+        }
+
+        ReactDOM.createRoot(document.getElementById('root')).render(<DutyRosterApp />);
     </script>
 </body>
 </html>
