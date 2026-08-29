@@ -59,6 +59,8 @@
 
         const WD_LABELS = ["日", "一", "二", "三", "四", "五", "六"];
         const WD_FULL = ["週日", "週一", "週二", "週三", "週四", "週五", "週六"];
+        const GRADES = ["五年級", "四年級", "三年級"];
+        const JERSEY_COLORS = ["#CFE85C", "#5CC8E8", "#E85C9E", "#E8B95C", "#8C5CE8", "#5CE89A"];
 
         function toKey(d) {
           const y = d.getFullYear();
@@ -96,11 +98,16 @@
             if (parts.length === 0) continue;
             const name = parts[0];
             const offDays = [];
+            let grade = "";
             for (const tok of parts.slice(1)) {
+              if (!grade && GRADES.includes(tok)) {
+                grade = tok;
+                continue;
+              }
               const wd = parseWeekdayToken(tok);
               if (wd !== null && !offDays.includes(wd)) offDays.push(wd);
             }
-            results.push({ name, offDays });
+            results.push({ name, grade, offDays });
           }
           return results;
         }
@@ -114,21 +121,20 @@
           return `${fmtShort(startDate)}–${fmtShort(endDate)}`;
         }
 
-        const JERSEY_COLORS = ["#CFE85C", "#5CC8E8", "#E85C9E", "#E8B95C", "#8C5CE8", "#5CE89A"];
-
         function DutyRosterApp() {
           const [players, setPlayers] = useState([]);
           const [settings, setSettings] = useState({
             startDate: todayKey(),
             endDate: addDays(todayKey(), 13),
-            dutyWeekdays: [1, 2, 3, 4, 5, 6],
-            perDay: 1,
+            dutyWeekdays: [1, 2, 3, 4, 5],
+            perDay: 3,
           });
           const [schedules, setSchedules] = useState([]);
           const [activeScheduleId, setActiveScheduleId] = useState(null);
           const [loaded, setLoaded] = useState(false);
           const [toast, setToast] = useState("");
           const [newName, setNewName] = useState("");
+          const [newGrade, setNewGrade] = useState("");
           const [newOffDays, setNewOffDays] = useState([]);
           const [excInputs, setExcInputs] = useState({});
           const [showImport, setShowImport] = useState(false);
@@ -231,10 +237,22 @@
             const id = (crypto.randomUUID && crypto.randomUUID()) || String(Date.now() + Math.random());
             setPlayers((prev) => [
               ...prev,
-              { id, name, offDays: newOffDays, exceptions: [], color: JERSEY_COLORS[prev.length % JERSEY_COLORS.length] },
+              {
+                id,
+                name,
+                grade: newGrade,
+                offDays: newOffDays,
+                exceptions: [],
+                color: JERSEY_COLORS[prev.length % JERSEY_COLORS.length],
+              },
             ]);
             setNewName("");
+            setNewGrade("");
             setNewOffDays([]);
+          }
+
+          function setPlayerGrade(id, grade) {
+            setPlayers((prev) => prev.map((p) => (p.id === id ? { ...p, grade: p.grade === grade ? "" : grade } : p)));
           }
 
           function removePlayer(id) {
@@ -285,6 +303,7 @@
               toAdd.push({
                 id,
                 name: item.name,
+                grade: item.grade || "",
                 offDays: item.offDays,
                 exceptions: [],
                 color: JERSEY_COLORS[(players.length + toAdd.length) % JERSEY_COLORS.length],
@@ -312,6 +331,13 @@
               showToast("請先新增球員");
               return;
             }
+            const gradesPresent = GRADES.filter((g) => players.some((p) => p.grade === g));
+            const groups = gradesPresent.length > 0 ? gradesPresent.map((g) => players.filter((p) => p.grade === g)) : [players];
+            const groupCount = groups.length;
+            const base = Math.floor(settings.perDay / groupCount);
+            const remainder = settings.perDay % groupCount;
+            const quotas = groups.map((_, i) => base + (i < remainder ? 1 : 0));
+
             const counts = {};
             const lastAssigned = {};
             players.forEach((p, i) => {
@@ -327,20 +353,26 @@
               const d = new Date(cur + "T00:00:00");
               const wd = d.getDay();
               if (settings.dutyWeekdays.includes(wd)) {
-                const available = players.filter((p) => !p.offDays.includes(wd) && !p.exceptions.includes(cur));
-                const sorted = [...available].sort((a, b) => {
-                  if (counts[a.id] !== counts[b.id]) return counts[a.id] - counts[b.id];
-                  return lastAssigned[a.id] - lastAssigned[b.id];
-                });
-                const chosen = sorted.slice(0, settings.perDay);
-                chosen.forEach((p) => {
-                  counts[p.id]++;
-                  lastAssigned[p.id] = dayIndex + players.length;
+                let assigned = [];
+                groups.forEach((groupPlayers, gi) => {
+                  const quota = quotas[gi];
+                  if (quota <= 0) return;
+                  const available = groupPlayers.filter((p) => !p.offDays.includes(wd) && !p.exceptions.includes(cur));
+                  const sorted = [...available].sort((a, b) => {
+                    if (counts[a.id] !== counts[b.id]) return counts[a.id] - counts[b.id];
+                    return lastAssigned[a.id] - lastAssigned[b.id];
+                  });
+                  const chosen = sorted.slice(0, quota);
+                  chosen.forEach((p) => {
+                    counts[p.id]++;
+                    lastAssigned[p.id] = dayIndex + players.length;
+                  });
+                  assigned = assigned.concat(chosen.map((p) => p.id));
                 });
                 result.push({
                   date: cur,
                   weekday: wd,
-                  assigned: chosen.map((p) => p.id),
+                  assigned,
                   slots: settings.perDay,
                 });
                 dayIndex++;
@@ -460,7 +492,7 @@
           }
 
           return (
-            <div className="w-full min-h-screen bg-[#F6F3EC] text-[#1F2A3C]">
+            <div className="w-full min-h-screen bg-[#F6F3EC] text-[#1F2A3C]" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
               {/* Header */}
               <div className="bg-[#16233B] text-[#F6F3EC] px-6 py-7 relative overflow-hidden">
                 <div className="absolute -right-8 -top-8 w-40 h-40 rounded-full bg-[#CFE85C] opacity-10" />
@@ -472,7 +504,7 @@
                     值日生排班助手
                   </h1>
                   <p className="text-sm text-[#B9C2D4] mt-1">
-                    先登記每位球員固定補習/無法打掃的日子，排班時自動略過衝突，不用再一個個對時間。
+                    先登記每位球員年級與固定無法打掃的日子，排班時自動略過衝突並按年級分組分配。
                   </p>
                 </div>
                 <div className="h-1 w-full bg-gradient-to-r from-[#CFE85C] via-[#5CC8E8] to-transparent mt-5 rounded-full" />
@@ -496,7 +528,9 @@
                     <div className="bg-white rounded-xl border border-[#D8D3C6] p-4 mb-4 shadow-sm">
                       <div className="flex items-center justify-between mb-2">
                         <div className="text-xs text-[#6B7280]">
-                          一行一位球員，格式：<span className="font-mono">姓名,星期,星期</span>（星期可省略）
+                          一行一位球員，格式：<span className="font-mono">姓名,年級,星期,星期</span>
+                          <br />
+                          年級請填「五年級／四年級／三年級」
                         </div>
                         <button onClick={() => setShowImport(false)} className="text-[#9CA3AF] hover:text-[#1F2A3C]">
                           <X size={14} />
@@ -505,7 +539,7 @@
                       <textarea
                         value={importText}
                         onChange={(e) => setImportText(e.target.value)}
-                        placeholder={"王小明,二,四\n林小華\n陳小美,三"}
+                        placeholder={"王小明,五年級,二,四\n林小華,四年級\n陳小美,三年級,三"}
                         rows={5}
                         className="w-full text-sm px-3 py-2 rounded-lg border border-[#D8D3C6] outline-none font-mono focus:border-[#16233B]"
                       />
@@ -527,6 +561,22 @@
                       placeholder="球員姓名"
                       className="w-full px-3 py-2 rounded-lg border border-[#D8D3C6] text-sm mb-3 outline-none focus:border-[#16233B]"
                     />
+                    <div className="text-xs text-[#6B7280] mb-1.5">年級（可選）</div>
+                    <div className="flex gap-1.5 mb-3 flex-wrap">
+                      {GRADES.map((g) => (
+                        <button
+                          key={g}
+                          onClick={() => setNewGrade((prev) => (prev === g ? "" : g))}
+                          className={`chip px-3 py-1.5 rounded-full text-xs font-medium border ${
+                            newGrade === g
+                              ? "bg-[#16233B] text-[#CFE85C] border-[#16233B]"
+                              : "bg-[#F6F3EC] text-[#1F2A3C] border-[#D8D3C6]"
+                          }`}
+                        >
+                          {g}
+                        </button>
+                      ))}
+                    </div>
                     <div className="text-xs text-[#6B7280] mb-1.5">固定無法打掃的星期（例：補習日）</div>
                     <div className="flex gap-1.5 mb-3 flex-wrap">
                       {WD_LABELS.map((label, wd) => (
@@ -567,12 +617,30 @@
                           >
                             {idx + 1}
                           </div>
-                          <div className="font-medium text-sm flex-1">{p.name}</div>
+                          <div className="font-medium text-sm flex-1">
+                            {p.name}
+                            {p.grade && <span className="ml-1.5 text-[10px] font-normal text-[#6B7280]">（{p.grade}）</span>}
+                          </div>
                           <button onClick={() => removePlayer(p.id)} className="text-[#9CA3AF] hover:text-[#FF6B4A]" title="刪除球員">
                             <Trash2 size={15} />
                           </button>
                         </div>
                         <div className="px-3 pb-3">
+                          <div className="flex gap-1.5 flex-wrap mb-2">
+                            {GRADES.map((g) => (
+                              <button
+                                key={g}
+                                onClick={() => setPlayerGrade(p.id, g)}
+                                className={`chip px-2.5 py-1 rounded-full text-[11px] font-medium border ${
+                                  p.grade === g
+                                    ? "bg-[#16233B] text-[#CFE85C] border-[#16233B]"
+                                    : "bg-[#F6F3EC] text-[#1F2A3C] border-[#D8D3C6]"
+                                }`}
+                              >
+                                {g}
+                              </button>
+                            ))}
+                          </div>
                           <div className="flex gap-1 flex-wrap mb-2">
                             {WD_LABELS.map((label, wd) => (
                               <button
@@ -655,9 +723,9 @@
                           <button
                             key={wd}
                             onClick={() => toggleDutyWeekday(wd)}
-                            className={`chip w-9 h-9 rounded-full text-sm font-medium border ${
+                            className={`chip w-9 h-9 rounded-full text-sm font-bold border-2 ${
                               settings.dutyWeekdays.includes(wd)
-                                ? "bg-[#16233B] text-[#CFE85C] border-[#16233B]"
+                                ? "bg-[#FF6B4A] text-white border-[#FF6B4A]"
                                 : "bg-[#F6F3EC] text-[#1F2A3C] border-[#D8D3C6]"
                             }`}
                           >
@@ -762,7 +830,7 @@
                                       <option value="">⚠️ 待安排</option>
                                       {players.map((p) => (
                                         <option key={p.id} value={p.id}>
-                                          {p.name}
+                                          {p.name} {p.grade ? `(${p.grade})` : ""}
                                           {isAvailable(p, row.date, row.weekday) ? "" : "（衝突）"}
                                         </option>
                                       ))}
