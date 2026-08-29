@@ -59,6 +59,9 @@
 
         const WD_LABELS = ["日", "一", "二", "三", "四", "五", "六"];
         const WD_FULL = ["週日", "週一", "週二", "週三", "週四", "週五", "週六"];
+        const WD_FULL_LABELS = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
+        const GRADES = ["五年級", "四年級", "三年級"];
+        const JERSEY_COLORS = ["#CFE85C", "#5CC8E8", "#E85C9E", "#E8B95C", "#8C5CE8", "#5CE89A"];
 
         function toKey(d) {
           const y = d.getFullYear();
@@ -96,11 +99,16 @@
             if (parts.length === 0) continue;
             const name = parts[0];
             const offDays = [];
+            let grade = "";
             for (const tok of parts.slice(1)) {
+              if (!grade && GRADES.includes(tok)) {
+                grade = tok;
+                continue;
+              }
               const wd = parseWeekdayToken(tok);
               if (wd !== null && !offDays.includes(wd)) offDays.push(wd);
             }
-            results.push({ name, offDays });
+            results.push({ name, grade, offDays });
           }
           return results;
         }
@@ -114,27 +122,168 @@
           return `${fmtShort(startDate)}–${fmtShort(endDate)}`;
         }
 
-        const JERSEY_COLORS = ["#CFE85C", "#5CC8E8", "#E85C9E", "#E8B95C", "#8C5CE8", "#5CE89A"];
+        function wrapTextByChar(ctx, text, maxWidth) {
+          const lines = [];
+          let current = "";
+          for (const ch of text) {
+            const test = current + ch;
+            if (current && ctx.measureText(test).width > maxWidth) {
+              lines.push(current);
+              current = ch;
+            } else {
+              current = test;
+            }
+          }
+          if (current) lines.push(current);
+          return lines;
+        }
+
+        function drawCalendarImage(canvas, { year, month, rowsByDate, players, note }) {
+          const ctx = canvas.getContext("2d");
+          const WIDTH = 1200;
+          const cellW = WIDTH / 7;
+          const cellH = 120;
+          const headerH = 84;
+          const weekdayRowH = 40;
+
+          const gradesPresent = GRADES.filter((g) => players.some((p) => p.grade === g));
+          const ungrouped = players.filter((p) => !p.grade);
+
+          ctx.font = '13px "Noto Sans TC", sans-serif';
+          const footerLines = [];
+          if (note && note.trim()) {
+            wrapTextByChar(ctx, `備註：${note.trim()}`, WIDTH - 48).forEach((l) => footerLines.push(l));
+          }
+          gradesPresent.forEach((g, i) => {
+            const names = players.filter((p) => p.grade === g).map((p) => p.name);
+            const line = `${i + 1}.${g}順序：${names.join("、")}（共${names.length}人）`;
+            wrapTextByChar(ctx, line, WIDTH - 48).forEach((l) => footerLines.push(l));
+          });
+          if (gradesPresent.length > 0 && ungrouped.length > 0) {
+            const line = `未分年級：${ungrouped.map((p) => p.name).join("、")}（共${ungrouped.length}人）`;
+            wrapTextByChar(ctx, line, WIDTH - 48).forEach((l) => footerLines.push(l));
+          }
+          const footerH = 28 + footerLines.length * 22 + 14;
+
+          const firstDay = new Date(year, month - 1, 1);
+          const startWeekday = firstDay.getDay();
+          const daysInMonth = new Date(year, month, 0).getDate();
+          const prevMonthDays = new Date(year, month - 1, 0).getDate();
+          const weeksNeeded = Math.ceil((startWeekday + daysInMonth) / 7);
+          const HEIGHT = headerH + weekdayRowH + weeksNeeded * cellH + footerH;
+
+          const SCALE = 2;
+          canvas.width = WIDTH * SCALE;
+          canvas.height = HEIGHT * SCALE;
+          canvas.style.width = WIDTH + "px";
+          canvas.style.height = HEIGHT + "px";
+          ctx.setTransform(SCALE, 0, 0, SCALE, 0, 0);
+
+          ctx.fillStyle = "#FFFFFF";
+          ctx.fillRect(0, 0, WIDTH, HEIGHT);
+
+          // Header
+          ctx.fillStyle = "#16233B";
+          ctx.fillRect(0, 0, WIDTH, headerH);
+          ctx.textBaseline = "alphabetic";
+          ctx.fillStyle = "#CFE85C";
+          ctx.font = 'bold 32px "Barlow Condensed", "Noto Sans TC", sans-serif';
+          ctx.fillText(`${year}年${month}月`, 24, 46);
+          ctx.fillStyle = "#B9C2D4";
+          ctx.font = '14px "Noto Sans TC", sans-serif';
+          ctx.fillText("值日生打掃班表", 24, 68);
+
+          // Weekday header row
+          ctx.fillStyle = "#E8B95C";
+          ctx.fillRect(0, headerH, WIDTH, weekdayRowH);
+          ctx.font = 'bold 16px "Noto Sans TC", sans-serif';
+          ctx.fillStyle = "#3A2E12";
+          ctx.textAlign = "center";
+          WD_FULL_LABELS.forEach((wd, i) => {
+            ctx.fillText(wd, i * cellW + cellW / 2, headerH + weekdayRowH / 2 + 5);
+          });
+          ctx.textAlign = "left";
+
+          // Grid
+          const gridTop = headerH + weekdayRowH;
+          ctx.strokeStyle = "#D8D3C6";
+          ctx.lineWidth = 1;
+
+          for (let w = 0; w < weeksNeeded; w++) {
+            for (let d = 0; d < 7; d++) {
+              const cellIndex = w * 7 + d;
+              const dayNum = cellIndex - startWeekday + 1;
+              const x = d * cellW;
+              const y = gridTop + w * cellH;
+
+              if (dayNum < 1) {
+                ctx.fillStyle = "#FAFAF7";
+                ctx.fillRect(x, y, cellW, cellH);
+                ctx.strokeRect(x, y, cellW, cellH);
+                ctx.fillStyle = "#B7B2A4";
+                ctx.font = '13px "Roboto Mono", monospace';
+                ctx.fillText(String(prevMonthDays + dayNum), x + 8, y + 20);
+              } else if (dayNum > daysInMonth) {
+                ctx.fillStyle = "#FAFAF7";
+                ctx.fillRect(x, y, cellW, cellH);
+                ctx.strokeRect(x, y, cellW, cellH);
+                ctx.fillStyle = "#B7B2A4";
+                ctx.font = '13px "Roboto Mono", monospace';
+                ctx.fillText(String(dayNum - daysInMonth), x + 8, y + 20);
+              } else {
+                ctx.strokeRect(x, y, cellW, cellH);
+                ctx.fillStyle = "#1F2A3C";
+                ctx.font = '600 15px "Roboto Mono", monospace';
+                ctx.fillText(String(dayNum), x + 8, y + 20);
+
+                const dateKey = `${year}-${String(month).padStart(2, "0")}-${String(dayNum).padStart(2, "0")}`;
+                const row = rowsByDate[dateKey];
+                if (row) {
+                  const names = row.assigned.map((id) => players.find((p) => p.id === id)?.name).filter(Boolean);
+                  const unmet = names.length < row.slots;
+                  ctx.font = '14px "Noto Sans TC", sans-serif';
+                  ctx.fillStyle = unmet ? "#C24A2E" : "#1F2A3C";
+                  const lines = wrapTextByChar(ctx, names.length ? names.join("、") : "⚠️ 待安排", cellW - 16);
+                  lines.slice(0, 4).forEach((line, li) => {
+                    ctx.fillText(line, x + 8, y + 44 + li * 19);
+                  });
+                }
+              }
+            }
+          }
+
+          // Footer
+          let fy = gridTop + weeksNeeded * cellH + 26;
+          ctx.font = '13px "Noto Sans TC", sans-serif';
+          ctx.fillStyle = "#6B7280";
+          footerLines.forEach((line) => {
+            ctx.fillText(line, 24, fy);
+            fy += 22;
+          });
+        }
 
         function DutyRosterApp() {
           const [players, setPlayers] = useState([]);
           const [settings, setSettings] = useState({
             startDate: todayKey(),
             endDate: addDays(todayKey(), 13),
-            dutyWeekdays: [1, 2, 3, 4, 5, 6],
-            perDay: 1,
+            dutyWeekdays: [1, 2, 3, 4, 5],
+            perDay: 3,
           });
           const [schedules, setSchedules] = useState([]);
           const [activeScheduleId, setActiveScheduleId] = useState(null);
           const [loaded, setLoaded] = useState(false);
           const [toast, setToast] = useState("");
           const [newName, setNewName] = useState("");
+          const [newGrade, setNewGrade] = useState("");
           const [newOffDays, setNewOffDays] = useState([]);
           const [excInputs, setExcInputs] = useState({});
           const [showImport, setShowImport] = useState(false);
           const [importText, setImportText] = useState("");
           const [confirmDialog, setConfirmDialog] = useState(null);
           const [exportModal, setExportModal] = useState(null);
+          const [calendarModal, setCalendarModal] = useState(null);
+          const canvasRef = useRef(null);
           const skipSave = useRef(true);
 
           useEffect(() => {
@@ -221,6 +370,39 @@
             }
           }
 
+          function openCalendarModal() {
+            if (schedules.length === 0) {
+              showToast("尚無班表可匯出");
+              return;
+            }
+            const rowsByDate = {};
+            schedules.forEach((batch) => {
+              batch.rows.forEach((row) => {
+                if (!rowsByDate[row.date]) rowsByDate[row.date] = row;
+              });
+            });
+            const monthKeys = Array.from(new Set(Object.keys(rowsByDate).map((k) => k.slice(0, 7)))).sort();
+            if (monthKeys.length === 0) {
+              showToast("尚無班表可匯出");
+              return;
+            }
+            const preferred = activeSchedule ? activeSchedule.startDate.slice(0, 7) : monthKeys[0];
+            const initialKey = monthKeys.includes(preferred) ? preferred : monthKeys[0];
+            const [y, m] = initialKey.split("-").map(Number);
+            setCalendarModal({ year: y, month: m, note: "", monthKeys, rowsByDate });
+          }
+
+          useEffect(() => {
+            if (!calendarModal || !canvasRef.current) return;
+            drawCalendarImage(canvasRef.current, {
+              year: calendarModal.year,
+              month: calendarModal.month,
+              rowsByDate: calendarModal.rowsByDate,
+              players,
+              note: calendarModal.note,
+            });
+          }, [calendarModal, players]);
+
           function askConfirm(message, onConfirm, confirmLabel = "確定") {
             setConfirmDialog({ message, onConfirm, confirmLabel });
           }
@@ -231,10 +413,22 @@
             const id = (crypto.randomUUID && crypto.randomUUID()) || String(Date.now() + Math.random());
             setPlayers((prev) => [
               ...prev,
-              { id, name, offDays: newOffDays, exceptions: [], color: JERSEY_COLORS[prev.length % JERSEY_COLORS.length] },
+              {
+                id,
+                name,
+                grade: newGrade,
+                offDays: newOffDays,
+                exceptions: [],
+                color: JERSEY_COLORS[prev.length % JERSEY_COLORS.length],
+              },
             ]);
             setNewName("");
+            setNewGrade("");
             setNewOffDays([]);
+          }
+
+          function setPlayerGrade(id, grade) {
+            setPlayers((prev) => prev.map((p) => (p.id === id ? { ...p, grade: p.grade === grade ? "" : grade } : p)));
           }
 
           function removePlayer(id) {
@@ -285,6 +479,7 @@
               toAdd.push({
                 id,
                 name: item.name,
+                grade: item.grade || "",
                 offDays: item.offDays,
                 exceptions: [],
                 color: JERSEY_COLORS[(players.length + toAdd.length) % JERSEY_COLORS.length],
@@ -312,6 +507,13 @@
               showToast("請先新增球員");
               return;
             }
+            const gradesPresent = GRADES.filter((g) => players.some((p) => p.grade === g));
+            const groups = gradesPresent.length > 0 ? gradesPresent.map((g) => players.filter((p) => p.grade === g)) : [players];
+            const groupCount = groups.length;
+            const base = Math.floor(settings.perDay / groupCount);
+            const remainder = settings.perDay % groupCount;
+            const quotas = groups.map((_, i) => base + (i < remainder ? 1 : 0));
+
             const counts = {};
             const lastAssigned = {};
             players.forEach((p, i) => {
@@ -327,20 +529,26 @@
               const d = new Date(cur + "T00:00:00");
               const wd = d.getDay();
               if (settings.dutyWeekdays.includes(wd)) {
-                const available = players.filter((p) => !p.offDays.includes(wd) && !p.exceptions.includes(cur));
-                const sorted = [...available].sort((a, b) => {
-                  if (counts[a.id] !== counts[b.id]) return counts[a.id] - counts[b.id];
-                  return lastAssigned[a.id] - lastAssigned[b.id];
-                });
-                const chosen = sorted.slice(0, settings.perDay);
-                chosen.forEach((p) => {
-                  counts[p.id]++;
-                  lastAssigned[p.id] = dayIndex + players.length;
+                let assigned = [];
+                groups.forEach((groupPlayers, gi) => {
+                  const quota = quotas[gi];
+                  if (quota <= 0) return;
+                  const available = groupPlayers.filter((p) => !p.offDays.includes(wd) && !p.exceptions.includes(cur));
+                  const sorted = [...available].sort((a, b) => {
+                    if (counts[a.id] !== counts[b.id]) return counts[a.id] - counts[b.id];
+                    return lastAssigned[a.id] - lastAssigned[b.id];
+                  });
+                  const chosen = sorted.slice(0, quota);
+                  chosen.forEach((p) => {
+                    counts[p.id]++;
+                    lastAssigned[p.id] = dayIndex + players.length;
+                  });
+                  assigned = assigned.concat(chosen.map((p) => p.id));
                 });
                 result.push({
                   date: cur,
                   weekday: wd,
-                  assigned: chosen.map((p) => p.id),
+                  assigned,
                   slots: settings.perDay,
                 });
                 dayIndex++;
@@ -460,7 +668,7 @@
           }
 
           return (
-            <div className="w-full min-h-screen bg-[#F6F3EC] text-[#1F2A3C]">
+            <div className="w-full min-h-screen bg-[#F6F3EC] text-[#1F2A3C]" style={{ fontFamily: "'Noto Sans TC', sans-serif" }}>
               {/* Header */}
               <div className="bg-[#16233B] text-[#F6F3EC] px-6 py-7 relative overflow-hidden">
                 <div className="absolute -right-8 -top-8 w-40 h-40 rounded-full bg-[#CFE85C] opacity-10" />
@@ -472,7 +680,7 @@
                     值日生排班助手
                   </h1>
                   <p className="text-sm text-[#B9C2D4] mt-1">
-                    先登記每位球員固定補習/無法打掃的日子，排班時自動略過衝突，不用再一個個對時間。
+                    先登記每位球員年級與固定無法打掃的日子，排班時自動略過衝突並按年級分組分配。
                   </p>
                 </div>
                 <div className="h-1 w-full bg-gradient-to-r from-[#CFE85C] via-[#5CC8E8] to-transparent mt-5 rounded-full" />
@@ -496,7 +704,9 @@
                     <div className="bg-white rounded-xl border border-[#D8D3C6] p-4 mb-4 shadow-sm">
                       <div className="flex items-center justify-between mb-2">
                         <div className="text-xs text-[#6B7280]">
-                          一行一位球員，格式：<span className="font-mono">姓名,星期,星期</span>（星期可省略）
+                          一行一位球員，格式：<span className="font-mono">姓名,年級,星期,星期</span>
+                          <br />
+                          年級請填「五年級／四年級／三年級」
                         </div>
                         <button onClick={() => setShowImport(false)} className="text-[#9CA3AF] hover:text-[#1F2A3C]">
                           <X size={14} />
@@ -505,7 +715,7 @@
                       <textarea
                         value={importText}
                         onChange={(e) => setImportText(e.target.value)}
-                        placeholder={"王小明,二,四\n林小華\n陳小美,三"}
+                        placeholder={"王小明,五年級,二,四\n林小華,四年級\n陳小美,三年級,三"}
                         rows={5}
                         className="w-full text-sm px-3 py-2 rounded-lg border border-[#D8D3C6] outline-none font-mono focus:border-[#16233B]"
                       />
@@ -527,6 +737,22 @@
                       placeholder="球員姓名"
                       className="w-full px-3 py-2 rounded-lg border border-[#D8D3C6] text-sm mb-3 outline-none focus:border-[#16233B]"
                     />
+                    <div className="text-xs text-[#6B7280] mb-1.5">年級（可選）</div>
+                    <div className="flex gap-1.5 mb-3 flex-wrap">
+                      {GRADES.map((g) => (
+                        <button
+                          key={g}
+                          onClick={() => setNewGrade((prev) => (prev === g ? "" : g))}
+                          className={`chip px-3 py-1.5 rounded-full text-xs font-medium border ${
+                            newGrade === g
+                              ? "bg-[#16233B] text-[#CFE85C] border-[#16233B]"
+                              : "bg-[#F6F3EC] text-[#1F2A3C] border-[#D8D3C6]"
+                          }`}
+                        >
+                          {g}
+                        </button>
+                      ))}
+                    </div>
                     <div className="text-xs text-[#6B7280] mb-1.5">固定無法打掃的星期（例：補習日）</div>
                     <div className="flex gap-1.5 mb-3 flex-wrap">
                       {WD_LABELS.map((label, wd) => (
@@ -567,12 +793,30 @@
                           >
                             {idx + 1}
                           </div>
-                          <div className="font-medium text-sm flex-1">{p.name}</div>
+                          <div className="font-medium text-sm flex-1">
+                            {p.name}
+                            {p.grade && <span className="ml-1.5 text-[10px] font-normal text-[#6B7280]">（{p.grade}）</span>}
+                          </div>
                           <button onClick={() => removePlayer(p.id)} className="text-[#9CA3AF] hover:text-[#FF6B4A]" title="刪除球員">
                             <Trash2 size={15} />
                           </button>
                         </div>
                         <div className="px-3 pb-3">
+                          <div className="flex gap-1.5 flex-wrap mb-2">
+                            {GRADES.map((g) => (
+                              <button
+                                key={g}
+                                onClick={() => setPlayerGrade(p.id, g)}
+                                className={`chip px-2.5 py-1 rounded-full text-[11px] font-medium border ${
+                                  p.grade === g
+                                    ? "bg-[#16233B] text-[#CFE85C] border-[#16233B]"
+                                    : "bg-[#F6F3EC] text-[#1F2A3C] border-[#D8D3C6]"
+                                }`}
+                              >
+                                {g}
+                              </button>
+                            ))}
+                          </div>
                           <div className="flex gap-1 flex-wrap mb-2">
                             {WD_LABELS.map((label, wd) => (
                               <button
@@ -655,9 +899,9 @@
                           <button
                             key={wd}
                             onClick={() => toggleDutyWeekday(wd)}
-                            className={`chip w-9 h-9 rounded-full text-sm font-medium border ${
+                            className={`chip w-9 h-9 rounded-full text-sm font-bold border-2 ${
                               settings.dutyWeekdays.includes(wd)
-                                ? "bg-[#16233B] text-[#CFE85C] border-[#16233B]"
+                                ? "bg-[#FF6B4A] text-white border-[#FF6B4A]"
                                 : "bg-[#F6F3EC] text-[#1F2A3C] border-[#D8D3C6]"
                             }`}
                           >
@@ -729,12 +973,20 @@
                             {fmtShort(activeSchedule.startDate)} — {fmtShort(activeSchedule.endDate)}
                           </span>
                         </div>
-                        <button
-                          onClick={openExportModal}
-                          className="flex items-center gap-1.5 text-xs font-medium bg-[#16233B] text-[#F6F3EC] px-3 py-1.5 rounded-lg hover:bg-[#0f1a2c]"
-                        >
-                          <Copy size={13} /> 匯出班表
-                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={openCalendarModal}
+                            className="flex items-center gap-1.5 text-xs font-medium bg-[#E8B95C] text-[#3A2E12] px-3 py-1.5 rounded-lg hover:brightness-95"
+                          >
+                            <CalendarDays size={13} /> 月曆圖片
+                          </button>
+                          <button
+                            onClick={openExportModal}
+                            className="flex items-center gap-1.5 text-xs font-medium bg-[#16233B] text-[#F6F3EC] px-3 py-1.5 rounded-lg hover:bg-[#0f1a2c]"
+                          >
+                            <Copy size={13} /> 匯出班表
+                          </button>
+                        </div>
                       </div>
                       <div className="divide-y divide-[#EDE9DE] max-h-[560px] overflow-y-auto">
                         {activeSchedule.rows.map((row) => {
@@ -796,6 +1048,70 @@
                     <div style={{ display: "flex", gap: "8px", marginTop: "12px", flexWrap: "wrap" }}>
                       <button onClick={() => { tryCopyText(exportModal.text).then(() => showToast("已複製，可貼到 LINE 群組")).catch(() => { const ok = fallbackCopyText(exportModal.text); showToast(ok ? "已複製，可貼到 LINE 群組" : "複製失敗"); }); }} style={{ flex: 1, fontSize: "13px", padding: "8px 12px", borderRadius: "8px", border: "none", backgroundColor: "#16233B", color: "#CFE85C", fontWeight: 600, cursor: "pointer" }}>複製到剪貼簿</button>
                       <button onClick={() => { const ok = downloadTextFile(exportModal.text, exportModal.filename); showToast(ok ? "已下載班表檔案" : "下載失敗"); }} style={{ flex: 1, fontSize: "13px", padding: "8px 12px", borderRadius: "8px", border: "1px solid #D8D3C6", backgroundColor: "#FFFFFF", color: "#1F2A3C", fontWeight: 600, cursor: "pointer" }}>下載 .txt 檔</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {calendarModal && (
+                <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, padding: "16px", overflowY: "auto" }}>
+                  <div style={{ backgroundColor: "#FFFFFF", borderRadius: "12px", boxShadow: "0 10px 40px rgba(0,0,0,0.25)", maxWidth: "700px", width: "100%", padding: "20px", margin: "auto" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                      <div style={{ fontSize: "15px", fontWeight: 700, color: "#1F2A3C" }}>月曆圖片匯出</div>
+                      <button onClick={() => setCalendarModal(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#9CA3AF" }}><X size={16} /></button>
+                    </div>
+
+                    <div style={{ display: "flex", gap: "10px", marginBottom: "10px", flexWrap: "wrap" }}>
+                      <select
+                        value={`${calendarModal.year}-${String(calendarModal.month).padStart(2, "0")}`}
+                        onChange={(e) => {
+                          const [y, m] = e.target.value.split("-").map(Number);
+                          setCalendarModal((prev) => ({ ...prev, year: y, month: m }));
+                        }}
+                        style={{ fontSize: "13px", padding: "6px 10px", borderRadius: "8px", border: "1px solid #D8D3C6" }}
+                      >
+                        {calendarModal.monthKeys.map((key) => {
+                          const [y, m] = key.split("-").map(Number);
+                          return <option key={key} value={key}>{y}年{m}月</option>;
+                        })}
+                      </select>
+                      <input
+                        value={calendarModal.note}
+                        onChange={(e) => setCalendarModal((prev) => ({ ...prev, note: e.target.value }))}
+                        placeholder="備註（會顯示在圖片最下方，可留空）"
+                        style={{ flex: 1, minWidth: "180px", fontSize: "13px", padding: "6px 10px", borderRadius: "8px", border: "1px solid #D8D3C6" }}
+                      />
+                    </div>
+
+                    <div style={{ border: "1px solid #D8D3C6", borderRadius: "8px", overflow: "auto", maxHeight: "60vh", backgroundColor: "#FAFAF7" }}>
+                      <canvas ref={canvasRef} style={{ display: "block", width: "100%", height: "auto" }} />
+                    </div>
+
+                    <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
+                      <button
+                        onClick={() => {
+                          const canvas = canvasRef.current;
+                          if (!canvas) return;
+                          canvas.toBlob((blob) => {
+                            if (!blob) {
+                              showToast("匯出失敗");
+                              return;
+                            }
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement("a");
+                            a.href = url;
+                            a.download = `值日生月曆_${calendarModal.year}年${calendarModal.month}月.png`;
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            URL.revokeObjectURL(url);
+                            showToast("已下載月曆圖片");
+                          }, "image/png");
+                        }}
+                        style={{ flex: 1, fontSize: "13px", padding: "8px 12px", borderRadius: "8px", border: "none", backgroundColor: "#16233B", color: "#CFE85C", fontWeight: 600, cursor: "pointer" }}
+                      >
+                        下載月曆圖片（PNG）
+                      </button>
                     </div>
                   </div>
                 </div>
